@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="ko" class="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>MOTO GARAGE - 바이크 정비 차계부</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
+<style>
+body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;background:#09090b;color:#f4f4f5;-webkit-tap-highlight-color:transparent}
+.no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
+.bar{transition:width .5s cubic-bezier(.4,0,.2,1)}
+.inp{width:100%;background:#09090b;border:1px solid #3f3f46;border-radius:.75rem;padding:.6rem .85rem;font-size:.875rem;color:#fff;outline:none}
+.inp:focus{border-color:#f59e0b}
+</style>
+</head>
+<body class="min-h-screen pb-24 max-w-md mx-auto bg-zinc-950 border-x border-zinc-900 relative">
+
+<header class="sticky top-0 z-30 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/80 px-4 pt-4 pb-3">
+  <div class="flex items-center justify-between mb-3">
+    <div class="flex items-center gap-2">
+      <div class="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-zinc-950 text-lg"><i class="fa-solid fa-wrench"></i></div>
+      <h1 class="text-lg font-extrabold text-white">MOTO GARAGE</h1>
+    </div>
+    <div class="flex items-center gap-2">
+      <div id="sync" class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" title="연결 중"></div>
+      <button onclick="editBike()" data-new class="text-xs bg-zinc-800 text-zinc-200 px-3 py-1.5 rounded-full font-medium border border-zinc-700"><i class="fa-solid fa-plus text-amber-500"></i> 바이크 추가</button>
+    </div>
+  </div>
+  <div id="bike-tabs" class="flex gap-2 overflow-x-auto no-scrollbar pb-1"></div>
+</header>
+
+<main class="p-4 space-y-5">
+  <div id="home" class="space-y-5">
+    <section class="bg-gradient-to-br from-zinc-900 to-zinc-800 rounded-2xl p-4 border border-zinc-800">
+      <div class="flex justify-between items-start">
+        <div>
+          <span id="b-year" class="text-xs font-semibold text-amber-500 uppercase tracking-wider"></span>
+          <h2 id="b-name" class="text-xl font-bold text-white mt-0.5"></h2>
+        </div>
+        <button onclick="editBike(true)" aria-label="바이크 수정" class="text-zinc-400 hover:text-white p-1.5 rounded-lg bg-zinc-800/60"><i class="fa-solid fa-pen-to-square text-sm"></i></button>
+      </div>
+      <div class="mt-4 pt-3 border-t border-zinc-800 flex items-end justify-between">
+        <div>
+          <p class="text-xs text-zinc-400 mb-0.5">현재 누적 주행거리 (ODO)</p>
+          <div class="flex items-baseline gap-1"><span id="b-odo" class="text-3xl font-extrabold text-white">0</span><span class="text-sm font-semibold text-zinc-400">km</span></div>
+        </div>
+        <button onclick="editOdo()" class="bg-amber-500 active:scale-95 text-zinc-950 font-bold text-sm px-4 py-2.5 rounded-xl flex items-center gap-1.5"><i class="fa-solid fa-gauge-high"></i> ODO 갱신</button>
+      </div>
+      <div id="pins-box" class="mt-3 pt-3 border-t border-zinc-800 hidden">
+        <div class="text-xs font-semibold text-zinc-400 mb-2"><i class="fa-solid fa-thumbtack text-amber-500"></i> 고정된 핵심 스펙</div>
+        <div id="pins" class="grid grid-cols-2 gap-2"></div>
+      </div>
+    </section>
+
+    <div class="grid grid-cols-4 bg-zinc-900 p-1 rounded-xl border border-zinc-800 text-center" id="subtabs"></div>
+
+    <section id="view-consumables" class="space-y-3">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-bold text-zinc-300">소모품 수명 상태</h3>
+        <button onclick="editCons()" class="text-xs text-amber-500 font-semibold"><i class="fa-solid fa-plus"></i> 항목 추가</button>
+      </div>
+      <div id="list-consumables" class="space-y-3"></div>
+    </section>
+
+    <section id="view-fuel" class="space-y-3 hidden">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-bold text-zinc-300">주유 및 연비 기록</h3>
+        <button onclick="editFuel()" class="text-xs bg-amber-500/10 text-amber-500 border border-amber-500/30 px-2.5 py-1 rounded-lg font-semibold"><i class="fa-solid fa-plus"></i> 추가</button>
+      </div>
+      <div class="bg-zinc-900/70 border border-zinc-800 rounded-xl p-3 grid grid-cols-2 gap-2 text-xs">
+        <div><span class="text-zinc-400 block mb-0.5">총 주유 비용</span><span id="fuel-total" class="text-sm font-bold text-white"></span></div>
+        <div><span class="text-zinc-400 block mb-0.5">평균 연비</span><span id="fuel-avg" class="text-sm font-bold text-amber-400"></span></div>
+      </div>
+      <div id="list-fuel" class="space-y-2.5"></div>
+    </section>
+
+    <section id="view-history" class="space-y-3 hidden">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-bold text-zinc-300">정비 및 파츠 기록</h3>
+        <button onclick="editHist()" class="text-xs bg-amber-500/10 text-amber-500 border border-amber-500/30 px-2.5 py-1 rounded-lg font-semibold"><i class="fa-solid fa-plus"></i> 추가</button>
+      </div>
+      <div class="bg-zinc-900/70 border border-zinc-800 rounded-xl p-3 flex justify-between items-center text-xs">
+        <span class="text-zinc-400">총 누적 정비/튜닝 비용</span><span id="hist-total" class="text-base font-bold text-white"></span>
+      </div>
+      <div id="list-history" class="space-y-2.5"></div>
+    </section>
+
+    <section id="view-specs" class="space-y-3 hidden">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-bold text-zinc-300">규정 토크 / 오일 / 세팅 메모</h3>
+        <button onclick="editSpec()" class="text-xs bg-amber-500/10 text-amber-500 border border-amber-500/30 px-2.5 py-1 rounded-lg font-semibold"><i class="fa-solid fa-plus"></i> 추가</button>
+      </div>
+      <div id="list-specs" class="space-y-2.5"></div>
+    </section>
+  </div>
+
+  <section id="view-settings" class="space-y-4 hidden">
+    <h3 class="text-sm font-bold text-zinc-300">GitHub 데이터 관리</h3>
+    <div class="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 space-y-3">
+      <p class="text-xs text-zinc-400 leading-relaxed">데이터는 내 GitHub 저장소의 JSON 파일에 저장됩니다. 앱을 열 때, 화면으로 돌아올 때, 1분마다 최신 데이터를 가져옵니다.</p>
+      <div class="grid grid-cols-1 gap-2.5 pt-1">
+        <button onclick="editGh()" class="bg-amber-500 text-zinc-950 text-xs font-bold py-3 rounded-xl"><i class="fa-brands fa-github"></i> GitHub 연결 설정</button>
+        <div class="grid grid-cols-2 gap-2.5">
+          <button onclick="syncNow()" class="bg-zinc-800 text-white text-xs font-bold py-3 rounded-xl border border-zinc-700"><i class="fa-solid fa-rotate text-amber-500"></i> 지금 동기화</button>
+          <button onclick="importData()" class="bg-zinc-800 text-white text-xs font-bold py-3 rounded-xl border border-zinc-700"><i class="fa-solid fa-upload text-amber-500"></i> JSON 가져오기</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-2 gap-2.5 pt-2">
+        <button onclick="exportData()" class="bg-zinc-800 text-white text-xs font-bold py-3 rounded-xl border border-zinc-700"><i class="fa-solid fa-download text-amber-500"></i> JSON 백업</button>
+        <button onclick="resetAll()" class="bg-red-500/10 text-red-400 border border-red-500/30 text-xs font-bold py-3 rounded-xl"><i class="fa-solid fa-rotate-right"></i> 초기화</button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<nav class="fixed bottom-0 left-0 right-0 max-w-md mx-auto bg-zinc-950/95 backdrop-blur-md border-t border-zinc-800 flex justify-around py-2.5 px-4 z-30">
+  <button onclick="setMain('garage')" id="nav-garage" class="flex flex-col items-center gap-1 text-amber-500"><i class="fa-solid fa-motorcycle text-lg"></i><span class="text-[10px] font-bold">차고 / 정비</span></button>
+  <button onclick="editFuel()" class="flex flex-col items-center -mt-6">
+    <div class="w-12 h-12 rounded-full bg-amber-500 text-zinc-950 flex items-center justify-center shadow-lg shadow-amber-500/20 active:scale-95"><i class="fa-solid fa-gas-pump text-lg"></i></div>
+    <span class="text-[10px] font-bold text-zinc-400 mt-1">주유입력</span>
+  </button>
+  <button onclick="setMain('settings')" id="nav-settings" class="flex flex-col items-center gap-1 text-zinc-500"><i class="fa-solid fa-gear text-lg"></i><span class="text-[10px] font-bold">동기화 설정</span></button>
+</nav>
+
+<!-- 공용 입력 모달 (모든 추가/수정 폼이 이 하나를 사용) -->
+<div id="modal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+  <div class="bg-zinc-900 border border-zinc-800 rounded-2xl w-full max-w-sm p-5 space-y-4 max-h-[90vh] overflow-y-auto">
+    <div class="flex justify-between items-center">
+      <h3 id="m-title" class="text-base font-bold text-white"></h3>
+      <button onclick="closeForm()" aria-label="닫기" class="text-zinc-400 hover:text-white"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div id="m-body" class="grid grid-cols-2 gap-2.5"></div>
+    <div class="flex gap-2 pt-1">
+      <button id="m-extra" class="hidden bg-red-500/10 text-red-400 border border-red-500/30 font-bold py-3 px-4 rounded-xl text-xs"></button>
+      <button id="m-save" class="flex-1 bg-amber-500 text-zinc-950 font-bold py-3 rounded-xl text-sm">저장하기</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast" class="fixed top-20 left-1/2 -translate-x-1/2 bg-zinc-800 text-white text-xs font-semibold px-4 py-2.5 rounded-full border border-zinc-700 opacity-0 pointer-events-none transition-opacity duration-300 z-50 flex items-center gap-2">
+  <i class="fa-solid fa-circle-check text-amber-500"></i><span id="toast-msg"></span>
+</div>
+
+<script type="module">
+/* ---------- 유틸 ---------- */
+const $ = id => document.getElementById(id);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const n = v => Number(v) || 0;
+const fmt = v => n(v).toLocaleString();
+const today = () => new Date(Date.now() - new Date().getTimezoneOffset() * 60000).toISOString().slice(0, 10);
+const uid = p => p + Date.now() + Math.random().toString(36).slice(2, 5);
+const empty = t => `<div class="text-center py-8 text-xs text-zinc-500 bg-zinc-900/40 rounded-2xl border border-zinc-800/50">${t}</div>`;
+const noteBox = t => t ? `<p class="text-xs text-zinc-400 bg-zinc-950/60 p-2.5 rounded-xl border border-zinc-800/60">${esc(t)}</p>` : '';
+const iconBtn = (fn, id, ic, cls = 'text-zinc-600 hover:text-red-400') => `<button onclick="${fn}('${esc(id)}')" class="${cls} text-xs p-1"><i class="fa-solid ${ic}"></i></button>`;
+
+const defaultData = {
+  currentBikeId: 'bike_1',
+  bikes: [{
+    id: 'bike_1', name: 'Triumph Bonneville T120', year: 2020, odo: 14250,
+    consumables: [
+      { id: 'c1', name: '엔진오일 & 오일필터', interval: 4000, lastOdo: 12000, note: '10W40 100% 합성유 3.4L' },
+      { id: 'c2', name: '드라이브 체인 청소/루브', interval: 500, lastOdo: 13900, note: '장력 유격 20~30mm 확인' }
+    ],
+    fuelLogs: [{ id: 'f1', date: '2026-11-01', odo: 13950, liters: 12.5, cost: 23000, note: '고급유 주유' }],
+    history: [], specs: []
+  }]
+};
+
+let appData = structuredClone(defaultData);
+let sub = 'consumables', main = 'garage';
+
+const normalize = d => {
+  d.bikes = Array.isArray(d.bikes) && d.bikes.length ? d.bikes : structuredClone(defaultData.bikes);
+  d.bikes.forEach(b => ['consumables', 'fuelLogs', 'history', 'specs'].forEach(k => { if (!Array.isArray(b[k])) b[k] = []; }));
+  if (!d.bikes.some(b => b.id === d.currentBikeId)) d.currentBikeId = d.bikes[0].id;
+  return d;
+};
+const bike = () => appData.bikes.find(b => b.id === appData.currentBikeId) || appData.bikes[0];
+
+/* ---------- GitHub 동기화 ---------- */
+const dot = (cls, title) => { const e = $('sync'); e.className = `w-2.5 h-2.5 rounded-full ${cls}`; e.title = title; };
+const ls = {
+  get: k => { try { return localStorage.getItem(k); } catch { return null; } },
+  set: (k, v) => { try { localStorage.setItem(k, v); } catch {} }
+};
+let cfg = (() => { try { return JSON.parse(ls.get('gh_cfg')) || {}; } catch { return {}; } })();
+const ready = () => !!(cfg.owner && cfg.repo && cfg.token);
+const branch = () => cfg.branch || 'main';
+const fileUrl = () => `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${cfg.path || 'garage-data.json'}`;
+const hdr = () => ({ Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' });
+const b64e = s => { let t = ''; new TextEncoder().encode(s).forEach(x => t += String.fromCharCode(x)); return btoa(t); };
+const b64d = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g, '')), c => c.charCodeAt(0)));
+
+let sha = ls.get('gh_sha') || null, pending = 0, chain = Promise.resolve();
+
+async function getRemote() {
+  return fetch(`${fileUrl()}?ref=${encodeURIComponent(branch())}&t=${Date.now()}`, { headers: hdr(), cache: 'no-store' });
+}
+
+async function pull(force) {
+  if (!ready()) return dot('bg-zinc-600', 'GitHub 미연결 (설정 탭에서 연결)');
+  if (pending && !force) return;
+  dot('bg-amber-500 animate-pulse', '동기화 중');
+  try {
+    const r = await getRemote();
+    if (r.status === 404) { sha = null; await push(); dot('bg-emerald-500', '동기화됨'); return; }
+    if (!r.ok) throw new Error(r.status);
+    const j = await r.json();
+    if (j.sha !== sha) {
+      sha = j.sha; ls.set('gh_sha', sha);
+      appData = normalize(JSON.parse(b64d(j.content)));
+      ls.set('gh_cache', JSON.stringify(appData));
+      renderAll();
+    }
+    dot('bg-emerald-500', '동기화됨');
+  } catch (e) { console.error(e); dot('bg-red-500', 'GitHub 오류: 토큰/저장소 설정을 확인하세요'); }
+}
+
+async function push(retry = true) {
+  const body = { message: `garage update ${new Date().toISOString()}`, content: b64e(JSON.stringify(appData, null, 2)), branch: branch() };
+  if (sha) body.sha = sha;
+  const r = await fetch(fileUrl(), { method: 'PUT', headers: hdr(), body: JSON.stringify(body) });
+  if ((r.status === 409 || r.status === 422) && retry) {   // 다른 기기가 먼저 저장한 경우: 최신 sha를 받아 다시 시도
+    const g = await getRemote();
+    sha = g.ok ? (await g.json()).sha : null;
+    return push(false);
+  }
+  if (!r.ok) throw new Error(r.status);
+  sha = (await r.json()).content.sha; ls.set('gh_sha', sha);
+}
+
+// 변경 즉시 화면 + 이 기기에 저장, GitHub에는 줄 세워 순서대로 업로드
+const save = (msg) => {
+  renderAll();
+  if (msg) toast(msg);
+  ls.set('gh_cache', JSON.stringify(appData));
+  if (!ready()) return;
+  pending++; dot('bg-amber-500 animate-pulse', '저장 중');
+  chain = chain.then(() => push())
+    .then(() => dot('bg-emerald-500', '동기화됨'))
+    .catch(e => { console.error(e); dot('bg-red-500', '저장 실패'); toast('GitHub 저장 실패'); })
+    .finally(() => { pending--; });
+};
+
+window.editGh = () => openForm('GitHub 연결 설정', [
+  { k: 'owner', label: 'GitHub 사용자명', half: true, ph: 'myname' },
+  { k: 'repo', label: '저장소 이름', half: true, ph: 'moto-garage-data' },
+  { k: 'branch', label: '브랜치', half: true, ph: 'main' },
+  { k: 'path', label: '데이터 파일', half: true, ph: 'garage-data.json' },
+  { k: 'token', label: 'Personal Access Token', type: 'password', ph: 'github_pat_...' }
+], { branch: 'main', path: 'garage-data.json', ...cfg }, v => {
+  if (!v.owner || !v.repo || !v.token) return '사용자명, 저장소, 토큰을 입력하세요.';
+  cfg = v; ls.set('gh_cfg', JSON.stringify(cfg));
+  sha = null; ls.set('gh_sha', '');
+  pull(true); toast('연결 설정이 저장되었습니다.');
+});
+window.syncNow = () => { pull(true); toast('동기화를 요청했습니다.'); };
+window.importData = () => {
+  const i = document.createElement('input'); i.type = 'file'; i.accept = 'application/json,.json';
+  i.onchange = async () => {
+    try {
+      const d = normalize(JSON.parse(await i.files[0].text()));
+      if (!confirm('현재 데이터를 가져온 파일로 덮어쓸까요?')) return;
+      appData = d; save('가져오기 완료');
+    } catch { alert('올바른 JSON 백업 파일이 아닙니다.'); }
+  };
+  i.click();
+};
+
+function toast(msg) {
+  $('toast-msg').textContent = msg;
+  $('toast').classList.remove('opacity-0');
+  clearTimeout(toast.t);
+  toast.t = setTimeout(() => $('toast').classList.add('opacity-0'), 2200);
+}
+
+/* ---------- 공용 입력 폼 ---------- */
+let onSave = null;
+function openForm(title, fields, vals, cb, extra) {
+  $('m-title').textContent = title;
+  $('m-body').innerHTML = fields.map(f => {
+    const v = vals[f.k] ?? '';
+    const span = f.half ? 'col-span-1' : 'col-span-2';
+    const id = 'f_' + f.k;
+    let input;
+    if (f.type === 'select') input = `<select id="${id}" class="inp">${f.opts.map(o => `<option value="${esc(o[0])}" ${o[0] === v ? 'selected' : ''}>${esc(o[1])}</option>`).join('')}</select>`;
+    else if (f.type === 'textarea') input = `<textarea id="${id}" rows="2" class="inp" placeholder="${esc(f.ph)}">${esc(v)}</textarea>`;
+    else if (f.type === 'checkbox') return `<label class="${span} flex items-center gap-2 cursor-pointer"><input type="checkbox" id="${id}" class="w-4 h-4 accent-amber-500" ${vals[f.k] ? 'checked' : ''}><span class="text-xs text-zinc-300">${esc(f.label)}</span></label>`;
+    else input = `<input id="${id}" type="${f.type || 'text'}" ${f.type === 'number' ? 'inputmode="decimal" step="any"' : ''} value="${esc(v)}" class="inp" placeholder="${esc(f.ph)}">`;
+    return `<div class="${span}"><label class="block text-xs text-zinc-400 mb-1">${esc(f.label)}</label>${input}</div>`;
+  }).join('');
+  onSave = () => {
+    const out = {};
+    fields.forEach(f => {
+      const el = $('f_' + f.k);
+      out[f.k] = f.type === 'checkbox' ? el.checked : f.type === 'number' ? n(el.value) : el.value.trim();
+    });
+    const err = cb(out);
+    if (err) return alert(err);
+    closeForm();
+  };
+  $('m-save').onclick = onSave;
+  const ex = $('m-extra');
+  ex.classList.toggle('hidden', !extra);
+  if (extra) { ex.textContent = extra.label; ex.onclick = () => { if (extra.fn()) closeForm(); }; }
+  $('modal').classList.replace('hidden', 'flex');
+}
+window.closeForm = () => $('modal').classList.replace('flex', 'hidden');
+
+const upsert = (arr, item) => { const i = arr.findIndex(x => x.id === item.id); if (i >= 0) arr[i] = item; else arr.unshift(item); };
+
+/* ---------- 폼 정의 ---------- */
+window.editOdo = () => openForm('주행거리 (ODO) 업데이트',
+  [{ k: 'odo', label: '현재 계기판 누적 거리 (km)', type: 'number' }], { odo: bike().odo },
+  v => { if (v.odo < 0) return '올바른 주행거리를 입력하세요.'; bike().odo = v.odo; save('주행거리가 업데이트되었습니다.'); });
+
+window.editBike = (isEdit) => {
+  const b = isEdit === true ? bike() : null;
+  openForm(b ? '바이크 정보 수정' : '새 바이크 등록',
+    [{ k: 'name', label: '바이크 모델명' }, { k: 'year', label: '연식', type: 'number', half: true }, { k: 'odo', label: '현재 ODO (km)', type: 'number', half: true }],
+    b || { name: '', year: new Date().getFullYear(), odo: 0 },
+    v => {
+      if (!v.name) return '모델명을 입력해주세요.';
+      if (b) Object.assign(b, v);
+      else { const id = uid('bike_'); appData.bikes.push({ id, ...v, consumables: [], fuelLogs: [], history: [], specs: [] }); appData.currentBikeId = id; }
+      save('저장되었습니다.');
+    },
+    b && appData.bikes.length > 1 ? { label: '삭제', fn: () => {
+      if (!confirm('이 바이크와 모든 기록을 삭제할까요?')) return false;
+      appData.bikes = appData.bikes.filter(x => x.id !== b.id);
+      appData.currentBikeId = appData.bikes[0].id;
+      save('삭제되었습니다.'); return true;
+    } } : null);
+};
+
+window.editCons = (id) => {
+  const old = id && bike().consumables.find(c => c.id === id);
+  openForm(old ? '소모품 항목 수정' : '소모품 항목 추가',
+    [{ k: 'name', label: '소모품 이름', ph: '예: 엔진오일 & 필터' },
+     { k: 'interval', label: '교체 주기 (km)', type: 'number', half: true, ph: '3000' },
+     { k: 'lastOdo', label: '마지막 교체 ODO', type: 'number', half: true },
+     { k: 'note', label: '메모 (오일 점도, 파츠 번호 등)', ph: '예: 10W40 합성유 1.3L' }],
+    old || { name: '', interval: 3000, lastOdo: bike().odo, note: '' },
+    v => {
+      if (!v.name || v.interval <= 0) return '항목명과 교체 주기를 입력하세요.';
+      upsert(bike().consumables, { ...(old || {}), id: old ? old.id : uid('c_'), ...v });
+      if (!old) { const a = bike().consumables; a.push(a.shift()); }
+      save(old ? '수정되었습니다.' : '소모품이 추가되었습니다.');
+    });
+};
+
+window.editFuel = (id) => {
+  const b = bike();
+  const old = typeof id === 'string' && b.fuelLogs.find(f => f.id === id);
+  openForm(old ? '주유 기록 수정' : '주유 기록 추가',
+    [{ k: 'date', label: '날짜', type: 'date', half: true }, { k: 'odo', label: 'ODO (km)', type: 'number', half: true },
+     { k: 'liters', label: '주유량 (L)', type: 'number', half: true, ph: '10.5' }, { k: 'cost', label: '주유 비용 (원)', type: 'number', half: true, ph: '18000' },
+     { k: 'note', label: '메모', ph: '예: 고급유 주유' }],
+    old || { date: today(), odo: b.odo, liters: '', cost: '', note: '' },
+    v => {
+      if (!v.liters || !v.cost) return '주유량과 비용을 입력해주세요.';
+      upsert(b.fuelLogs, { id: old ? old.id : uid('f_'), ...v });
+      if (v.odo > b.odo) b.odo = v.odo;
+      main = 'garage'; sub = 'fuel';
+      save('주유 기록이 저장되었습니다.');
+    });
+};
+
+window.editHist = (id) => {
+  const b = bike();
+  const old = id && b.history.find(h => h.id === id);
+  openForm(old ? '정비 기록 수정' : '정비 / 튜닝 이력 기록',
+    [{ k: 'type', label: '구분', type: 'select', half: true, opts: [['정비', '정비 / 소모품'], ['튜닝', '튜닝 / 파츠장착'], ['점검', '점검 / 세차']] },
+     { k: 'date', label: '날짜', type: 'date', half: true },
+     { k: 'title', label: '작업 내용 / 파츠명', ph: '예: 브렘보 캘리퍼 장착' },
+     { k: 'odo', label: '작업 시 ODO (km)', type: 'number', half: true }, { k: 'cost', label: '비용 (원)', type: 'number', half: true },
+     { k: 'note', label: '상세 메모', type: 'textarea', ph: '메모 입력' }],
+    old || { type: '정비', date: today(), title: '', odo: b.odo, cost: '', note: '' },
+    v => {
+      if (!v.title) return '작업 내용을 입력해주세요.';
+      upsert(b.history, { id: old ? old.id : uid('h_'), ...v });
+      main = 'garage'; sub = 'history';
+      save('저장되었습니다.');
+    });
+};
+
+window.editSpec = (id) => {
+  const old = id && bike().specs.find(s => s.id === id);
+  openForm(old ? '스펙 수정' : '스펙 / 토크 노트 추가',
+    [{ k: 'key', label: '항목명', ph: '예: 타이어 공기압' }, { k: 'val', label: '수치 / 내용', ph: '예: F 32 psi / R 36 psi' },
+     { k: 'pinned', label: '상단 대시보드에 고정하기', type: 'checkbox' }],
+    old ? { key: old.key, val: old.val, pinned: old.pinned } : { key: '', val: '', pinned: true },
+    v => {
+      if (!v.key || !v.val) return '항목명과 수치를 입력하세요.';
+      upsert(bike().specs, { id: old ? old.id : uid('s_'), ...v });
+      save('저장되었습니다.');
+    });
+};
+
+/* ---------- 삭제 / 기타 동작 ---------- */
+const del = (arr, msg) => id => { if (!confirm(msg)) return; bike()[arr] = bike()[arr].filter(x => x.id !== id); save('삭제되었습니다.'); };
+window.delCons = del('consumables', '이 소모품 항목을 삭제할까요?');
+window.delFuel = del('fuelLogs', '이 주유 기록을 삭제할까요?');
+window.delHist = del('history', '이 기록을 삭제할까요?');
+window.delSpec = del('specs', '이 스펙을 삭제할까요?');
+window.pinSpec = id => { const s = bike().specs.find(x => x.id === id); if (s) { s.pinned = !s.pinned; save(); } };
+window.selectBike = id => { appData.currentBikeId = id; save(); };
+
+window.resetCons = id => {
+  const b = bike(), c = b.consumables.find(x => x.id === id);
+  if (!c || !confirm(`'${c.name}' 항목을 현재 주행거리(${fmt(b.odo)} km) 기준으로 교체 완료 처리할까요?`)) return;
+  c.lastOdo = b.odo;
+  b.history.unshift({ id: uid('h_'), type: '정비', date: today(), title: `${c.name} 교체`, odo: b.odo, cost: 0, note: c.note ? `소모품 교체 (${c.note})` : '소모품 교체 완료' });
+  save('교체 완료 처리되었습니다!');
+};
+
+window.exportData = () => {
+  const url = URL.createObjectURL(new Blob([JSON.stringify(appData, null, 2)], { type: 'application/json' }));
+  const a = document.createElement('a');
+  a.href = url; a.download = `moto_garage_${today()}.json`; a.click();
+  URL.revokeObjectURL(url); toast('백업 파일이 다운로드되었습니다.');
+};
+window.resetAll = () => {
+  if (!confirm('모든 데이터를 초기 샘플 데이터로 리셋할까요? 되돌릴 수 없습니다.')) return;
+  appData = structuredClone(defaultData); save('리셋되었습니다.');
+};
+
+/* ---------- 탭 ---------- */
+const SUBS = [['consumables', '소모품'], ['fuel', '주유기록'], ['history', '정비이력'], ['specs', '스펙노트']];
+window.setSub = t => { sub = t; applyView(); };
+window.setMain = m => { main = m; applyView(); };
+function applyView() {
+  $('home').classList.toggle('hidden', main === 'settings');
+  $('view-settings').classList.toggle('hidden', main !== 'settings');
+  SUBS.forEach(([t]) => $('view-' + t).classList.toggle('hidden', t !== sub));
+  $('subtabs').innerHTML = SUBS.map(([t, l]) =>
+    `<button onclick="setSub('${t}')" class="py-2 text-[11px] font-bold rounded-lg transition ${t === sub ? 'bg-zinc-800 text-amber-500 shadow' : 'text-zinc-400'}">${l}</button>`).join('');
+  $('nav-garage').className = `flex flex-col items-center gap-1 ${main === 'garage' ? 'text-amber-500' : 'text-zinc-500'}`;
+  $('nav-settings').className = `flex flex-col items-center gap-1 ${main === 'settings' ? 'text-amber-500' : 'text-zinc-500'}`;
+}
+
+/* ---------- 렌더링 ---------- */
+function renderAll() {
+  const b = bike();
+  $('bike-tabs').innerHTML = appData.bikes.map(x => `
+    <button onclick="selectBike('${esc(x.id)}')" class="whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border ${x.id === b.id ? 'bg-amber-500 text-zinc-950 border-amber-500' : 'bg-zinc-900 text-zinc-400 border-zinc-800'}">
+      <i class="fa-solid fa-motorcycle"></i> ${esc(x.name)}</button>`).join('');
+  $('b-year').textContent = `${b.year} MODEL`;
+  $('b-name').textContent = b.name;
+  $('b-odo').textContent = fmt(b.odo);
+
+  const pinned = b.specs.filter(s => s.pinned);
+  $('pins-box').classList.toggle('hidden', !pinned.length);
+  $('pins').innerHTML = pinned.map(s => `
+    <div class="bg-zinc-950/80 border border-zinc-800 rounded-lg px-2.5 py-1.5">
+      <div class="text-[10px] text-zinc-400 truncate">${esc(s.key)}</div>
+      <div class="text-xs font-bold text-amber-400 truncate">${esc(s.val)}</div></div>`).join('');
+
+  // 소모품
+  $('list-consumables').innerHTML = b.consumables.length ? b.consumables.map(c => {
+    const used = Math.max(0, b.odo - n(c.lastOdo)), interval = n(c.interval) || 1;
+    const remain = interval - used, pct = Math.min(100, used / interval * 100);
+    let bar = 'bg-emerald-500', txt = `${fmt(remain)} km 남음`, badge = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
+    if (pct >= 100) { bar = 'bg-red-500'; txt = `${fmt(Math.abs(remain))} km 초과!`; badge = 'text-red-400 bg-red-500/10 border-red-500/30 animate-pulse'; }
+    else if (pct >= 80) { bar = 'bg-amber-500'; txt += ' (임박)'; badge = 'text-amber-400 bg-amber-500/10 border-amber-500/20'; }
+    return `<div class="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 space-y-3">
+      <div class="flex justify-between items-start gap-2">
+        <div class="min-w-0"><h4 class="text-sm font-bold text-white">${esc(c.name)}</h4>
+          <p class="text-[11px] text-zinc-400 mt-0.5">${esc(c.note || `교체 주기: ${fmt(c.interval)} km`)}</p></div>
+        <span class="text-[11px] font-bold px-2.5 py-1 rounded-full border whitespace-nowrap ${badge}">${txt}</span>
+      </div>
+      <div class="space-y-1.5">
+        <div class="w-full h-2 bg-zinc-950 rounded-full overflow-hidden border border-zinc-800"><div class="h-full ${bar} bar rounded-full" style="width:${pct}%"></div></div>
+        <div class="flex justify-between text-[11px] text-zinc-500"><span>최근교체: ${fmt(c.lastOdo)} km</span><span>주행: ${fmt(used)} / ${fmt(c.interval)} km</span></div>
+      </div>
+      <div class="pt-2 border-t border-zinc-800 flex justify-between items-center">
+        <div class="flex gap-2">
+          <button onclick="editCons('${esc(c.id)}')" class="text-[11px] text-amber-400 px-1 py-1">수정</button>
+          <button onclick="delCons('${esc(c.id)}')" class="text-[11px] text-zinc-500 hover:text-red-400 px-1 py-1">삭제</button>
+        </div>
+        <button onclick="resetCons('${esc(c.id)}')" class="bg-zinc-800 hover:bg-amber-500 hover:text-zinc-950 text-zinc-200 text-xs font-bold px-3.5 py-1.5 rounded-lg transition"><i class="fa-solid fa-rotate-right"></i> 교체완료 (리셋)</button>
+      </div></div>`;
+  }).join('') : empty('등록된 소모품 항목이 없습니다.');
+
+  // 주유 (구간 연비는 ODO 오름차순 기준)
+  const asc = [...b.fuelLogs].sort((x, y) => n(x.odo) - n(y.odo));
+  const effOf = {};
+  let dist = 0, lit = 0;
+  asc.forEach((f, i) => {
+    if (!i) return;
+    const d = n(f.odo) - n(asc[i - 1].odo);
+    if (d > 0 && n(f.liters) > 0) { effOf[f.id] = (d / f.liters).toFixed(1); dist += d; lit += n(f.liters); }
+  });
+  $('fuel-total').textContent = `${fmt(b.fuelLogs.reduce((s, f) => s + n(f.cost), 0))}원`;
+  $('fuel-avg').textContent = `${lit ? (dist / lit).toFixed(1) : '0.0'} km/L`;
+  $('list-fuel').innerHTML = b.fuelLogs.length ? [...b.fuelLogs].sort((x, y) => (y.date || '').localeCompare(x.date || '') || n(y.odo) - n(x.odo)).map(f => `
+    <div class="bg-zinc-900 rounded-2xl p-3.5 border border-zinc-800 space-y-2">
+      <div class="flex justify-between items-center">
+        <div class="flex items-center gap-2"><span class="text-[10px] font-bold px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/30">주유</span><span class="text-xs text-zinc-400">${esc(f.date)}</span></div>
+        <div>${iconBtn('editFuel', f.id, 'fa-pen', 'text-zinc-500 hover:text-amber-400')}${iconBtn('delFuel', f.id, 'fa-trash-can')}</div>
+      </div>
+      <div class="flex justify-between items-baseline">
+        <span class="text-sm font-bold text-white">${n(f.liters).toFixed(2)} L <span class="text-xs font-normal text-zinc-400">(리터당 ${fmt(n(f.liters) > 0 ? Math.round(n(f.cost) / f.liters) : 0)}원)</span></span>
+        <span class="text-sm font-bold text-amber-400">${fmt(f.cost)}원</span>
+      </div>
+      ${noteBox(f.note)}
+      <div class="flex justify-between items-center pt-1 text-xs text-zinc-500">
+        <span><i class="fa-solid fa-gauge-simple mr-1"></i>ODO ${fmt(f.odo)} km</span>
+        <span class="text-zinc-300 font-semibold">구간 연비: <strong class="text-white">${effOf[f.id] ? effOf[f.id] + ' km/L' : '-'}</strong></span>
+      </div></div>`).join('') : empty('등록된 주유 기록이 없습니다.');
+
+  // 정비 이력
+  $('hist-total').textContent = `${fmt(b.history.reduce((s, h) => s + n(h.cost), 0))}원`;
+  $('list-history').innerHTML = b.history.length ? [...b.history].sort((x, y) => (y.date || '').localeCompare(x.date || '')).map(h => `
+    <div class="bg-zinc-900 rounded-2xl p-3.5 border border-zinc-800 space-y-2">
+      <div class="flex justify-between items-center">
+        <span class="text-[10px] font-bold px-2 py-0.5 rounded border bg-amber-500/10 text-amber-400 border-amber-500/30">${esc(h.type)}</span>
+        <div>${iconBtn('editHist', h.id, 'fa-pen', 'text-zinc-500 hover:text-amber-400')}${iconBtn('delHist', h.id, 'fa-trash-can')}</div>
+      </div>
+      <h4 class="text-sm font-bold text-white">${esc(h.title)}</h4>
+      ${noteBox(h.note)}
+      <div class="flex justify-between items-center pt-1 text-xs text-zinc-500">
+        <span>${esc(h.date)} | ODO ${fmt(h.odo)} km</span><span class="font-bold text-zinc-200">${fmt(h.cost)}원</span>
+      </div></div>`).join('') : empty('기록된 이력이 없습니다.');
+
+  // 스펙
+  $('list-specs').innerHTML = b.specs.length ? b.specs.map(s => `
+    <div class="bg-zinc-900 rounded-xl p-3.5 border border-zinc-800 flex items-center justify-between gap-3">
+      <div class="min-w-0"><div class="text-xs text-zinc-400">${esc(s.key)}</div><div class="text-sm font-bold text-white mt-0.5 break-words">${esc(s.val)}</div></div>
+      <div class="flex items-center gap-2 shrink-0">
+        <button onclick="pinSpec('${esc(s.id)}')" aria-label="고정" class="p-2 rounded-lg border ${s.pinned ? 'bg-amber-500/10 border-amber-500/40 text-amber-500' : 'bg-zinc-950 border-zinc-800 text-zinc-500'}"><i class="fa-solid fa-thumbtack text-xs"></i></button>
+        <button onclick="editSpec('${esc(s.id)}')" aria-label="수정" class="p-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-500 hover:text-amber-400"><i class="fa-solid fa-pen text-xs"></i></button>
+        <button onclick="delSpec('${esc(s.id)}')" aria-label="삭제" class="p-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-500 hover:text-red-400"><i class="fa-solid fa-trash-can text-xs"></i></button>
+      </div></div>`).join('') : empty('저장된 스펙 노트가 없습니다.');
+
+  applyView();
+}
+try { const c = ls.get('gh_cache'); if (c) appData = normalize(JSON.parse(c)); } catch {}
+renderAll();
+pull();
+document.addEventListener('visibilitychange', () => { if (!document.hidden) pull(); });
+setInterval(() => { if (!document.hidden) pull(); }, 60000);
+</script>
+</body>
+</html>
