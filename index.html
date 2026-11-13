@@ -10,6 +10,7 @@
 <style>
 body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;background:#09090b;color:#f4f4f5;-webkit-tap-highlight-color:transparent}
 .no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
+.mh{scroll-margin-top:125px}html,body{overflow-anchor:none}
 .bar{transition:width .5s cubic-bezier(.4,0,.2,1)}
 .inp{width:100%;background:#09090b;border:1px solid #3f3f46;border-radius:.75rem;padding:.6rem .85rem;font-size:.875rem;color:#fff;outline:none}
 .inp:focus{border-color:#f59e0b}
@@ -54,7 +55,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;backgr
       </div>
     </section>
 
-    <div class="grid grid-cols-4 bg-zinc-900 p-1 rounded-xl border border-zinc-800 text-center" id="subtabs"></div>
+    <div class="grid grid-cols-5 bg-zinc-900 p-1 rounded-xl border border-zinc-800 text-center" id="subtabs"></div>
 
     <section id="view-consumables" class="space-y-3">
       <div class="flex items-center justify-between">
@@ -85,6 +86,24 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;backgr
         <span class="text-zinc-400">총 누적 정비/튜닝 비용</span><span id="hist-total" class="text-base font-bold text-white"></span>
       </div>
       <div id="list-history" class="space-y-2.5"></div>
+    </section>
+
+    <section id="view-calendar" class="space-y-3 hidden">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-bold text-zinc-300">일정 캘린더</h3>
+        <div class="flex gap-2">
+          <button onclick="calToday()" class="text-xs bg-zinc-800 text-zinc-200 border border-zinc-700 px-2.5 py-1 rounded-lg font-semibold">오늘</button>
+          <button onclick="editEvent()" class="text-xs bg-amber-500/10 text-amber-500 border border-amber-500/30 px-2.5 py-1 rounded-lg font-semibold"><i class="fa-solid fa-plus"></i> 일정</button>
+        </div>
+      </div>
+      <div class="flex flex-wrap gap-x-3 gap-y-1 text-[10px] text-zinc-400">
+        <span><i class="fa-solid fa-circle text-violet-400 text-[6px]"></i> 내 일정</span>
+        <span><i class="fa-solid fa-circle text-red-400 text-[6px]"></i> 소모품 교체 예상</span>
+        <span><i class="fa-solid fa-circle text-sky-400 text-[6px]"></i> 정비</span>
+        <span><i class="fa-solid fa-circle text-amber-400 text-[6px]"></i> 주유</span>
+      </div>
+      <p id="cal-hint" class="text-[10px] text-zinc-500"></p>
+      <div id="cal"></div>
     </section>
 
     <section id="view-specs" class="space-y-3 hidden">
@@ -173,7 +192,7 @@ let sub = 'consumables', main = 'garage';
 
 const normalize = d => {
   d.bikes = Array.isArray(d.bikes) && d.bikes.length ? d.bikes : structuredClone(defaultData.bikes);
-  d.bikes.forEach(b => ['consumables', 'fuelLogs', 'history', 'specs'].forEach(k => { if (!Array.isArray(b[k])) b[k] = []; }));
+  d.bikes.forEach(b => ['consumables', 'fuelLogs', 'history', 'specs', 'events'].forEach(k => { if (!Array.isArray(b[k])) b[k] = []; }));
   if (!d.bikes.some(b => b.id === d.currentBikeId)) d.currentBikeId = d.bikes[0].id;
   return d;
 };
@@ -279,7 +298,7 @@ function toast(msg) {
 /* ---------- 공용 입력 폼 ---------- */
 let onSave = null;
 function openForm(title, fields, vals, cb, extra) {
-  $('m-title').textContent = title;
+  $('m-title').textContent = title; $('m-save').textContent = '저장하기';
   $('m-body').innerHTML = fields.map(f => {
     const v = vals[f.k] ?? '';
     const span = f.half ? 'col-span-1' : 'col-span-2';
@@ -428,8 +447,8 @@ window.resetAll = () => {
 };
 
 /* ---------- 탭 ---------- */
-const SUBS = [['consumables', '소모품'], ['fuel', '주유기록'], ['history', '정비이력'], ['specs', '스펙노트']];
-window.setSub = t => { sub = t; applyView(); };
+const SUBS = [['consumables', '소모품'], ['fuel', '주유기록'], ['history', '정비이력'], ['specs', '스펙노트'], ['calendar', '일정']];
+window.setSub = t => { sub = t; applyView(); if (t === 'calendar' && !calInit) { calInit = true; requestAnimationFrame(calToday); } };
 window.setMain = m => { main = m; applyView(); };
 function applyView() {
   $('home').classList.toggle('hidden', main === 'settings');
@@ -440,6 +459,123 @@ function applyView() {
   $('nav-garage').className = `flex flex-col items-center gap-1 ${main === 'garage' ? 'text-amber-500' : 'text-zinc-500'}`;
   $('nav-settings').className = `flex flex-col items-center gap-1 ${main === 'settings' ? 'text-amber-500' : 'text-zinc-500'}`;
 }
+
+/* ---------- 일정 캘린더 ---------- */
+const WD = ['일', '월', '화', '수', '목', '금', '토'];
+const ymd = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+let calStart = -3, calEnd = 3, calInit = false, calMap = {}, calBusy = false;
+
+function buildMap() {
+  const b = bike(), m = {};
+  const add = (d, k, o) => { if (d) ((m[d] ||= {})[k] ||= []).push(o); };
+  b.fuelLogs.forEach(f => add(f.date, 'fuel', f));
+  b.history.forEach(h => add(h.date, 'hist', h));
+  (b.events || []).forEach(e => add(e.date, 'ev', e));
+  // 주유 기록의 하루 평균 주행거리로 소모품 교체일 추정
+  const l = b.fuelLogs.filter(f => f.date).sort((x, y) => x.date.localeCompare(y.date));
+  let perDay = 0;
+  if (l.length > 1) {
+    const dd = (new Date(l[l.length - 1].date) - new Date(l[0].date)) / 864e5, dk = n(l[l.length - 1].odo) - n(l[0].odo);
+    if (dd > 0 && dk > 0) perDay = dk / dd;
+  }
+  $('cal-hint').textContent = perDay ? `하루 평균 약 ${perDay.toFixed(1)} km 기준으로 소모품 교체일을 예상합니다.` : '주유 기록이 2개 이상(날짜 다른) 있으면 소모품 교체 예상일이 표시됩니다.';
+  if (perDay) b.consumables.forEach(c => {
+    const remain = n(c.interval) - (b.odo - n(c.lastOdo));
+    const d = new Date(); d.setDate(d.getDate() + (remain <= 0 ? 0 : Math.ceil(remain / perDay)));
+    add(ymd(d), 'est', { name: c.name, over: remain <= 0 });
+  });
+  return m;
+}
+
+function monthBlock(off) {
+  const t = new Date(), d = new Date(t.getFullYear(), t.getMonth() + off, 1);
+  const y = d.getFullYear(), mo = d.getMonth(), lead = d.getDay(), days = new Date(y, mo + 1, 0).getDate(), td = ymd(t);
+  let cells = '<div></div>'.repeat(lead);
+  for (let i = 1; i <= days; i++) {
+    const ds = `${y}-${String(mo + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`, m = calMap[ds] || {}, dow = (lead + i - 1) % 7;
+    const chips = [
+      ...(m.ev || []).map(e => [e.done ? 'bg-emerald-500/20 text-emerald-300 line-through' : 'bg-violet-500/25 text-violet-200', e.title]),
+      ...(m.est || []).map(e => ['bg-red-500/20 text-red-300', e.name + ' 교체']),
+      ...(m.hist || []).map(h => ['bg-sky-500/20 text-sky-300', h.title]),
+      ...(m.fuel || []).map(() => ['bg-amber-500/20 text-amber-300', '주유'])
+    ];
+    cells += `<div onclick="openDay('${ds}')" class="min-h-[68px] p-0.5 border-t border-zinc-800/70 cursor-pointer ${ds === td ? 'bg-amber-500/10' : ''}">
+      <div class="text-[10px] px-0.5 ${ds === td ? 'font-extrabold text-amber-400' : dow === 0 ? 'text-red-400' : dow === 6 ? 'text-sky-400' : 'text-zinc-400'}">${i}</div>
+      ${chips.slice(0, 2).map(c => `<div class="text-[8px] leading-tight rounded px-0.5 mb-px truncate ${c[0]}">${esc(c[1])}</div>`).join('')}
+      ${chips.length > 2 ? `<div class="text-[8px] text-zinc-500 px-0.5">+${chips.length - 2}</div>` : ''}</div>`;
+  }
+  return `<div id="m_${off}" class="mh mb-5"><h4 class="text-sm font-bold text-white mb-1 px-1">${y}년 ${mo + 1}월${off === 0 ? ' <span class="text-[10px] text-amber-500">이번 달</span>' : ''}</h4>
+    <div class="grid grid-cols-7 text-[10px] text-center text-zinc-500 mb-0.5">${WD.map(w => `<div>${w}</div>`).join('')}</div><div class="grid grid-cols-7">${cells}</div></div>`;
+}
+
+function renderCal() {
+  calMap = buildMap();
+  let h = '';
+  for (let o = calStart; o <= calEnd; o++) h += monthBlock(o);
+  $('cal').innerHTML = h;
+}
+window.calToday = () => { const e = $('m_0'); if (e) e.scrollIntoView({ block: 'start' }); };
+
+// 위/아래로 스크롤하면 3개월씩 계속 추가 (무한)
+window.addEventListener('scroll', () => {
+  if (calBusy || sub !== 'calendar' || main !== 'garage') return;
+  const c = $('cal'); if (!c.firstElementChild) return;
+  if (c.firstElementChild.getBoundingClientRect().top > -300) {
+    calBusy = true;
+    const h0 = document.documentElement.scrollHeight; let h = '';
+    for (let o = calStart - 3; o < calStart; o++) h += monthBlock(o);
+    calStart -= 3; c.insertAdjacentHTML('afterbegin', h);
+    window.scrollBy(0, document.documentElement.scrollHeight - h0);
+    requestAnimationFrame(() => { calBusy = false; });
+  } else if (c.lastElementChild.getBoundingClientRect().bottom < innerHeight + 600) {
+    calBusy = true; let h = '';
+    for (let o = calEnd + 1; o <= calEnd + 3; o++) h += monthBlock(o);
+    calEnd += 3; c.insertAdjacentHTML('beforeend', h);
+    requestAnimationFrame(() => { calBusy = false; });
+  }
+}, { passive: true });
+
+window.editEvent = (id, date) => {
+  const b = bike(); b.events ||= [];
+  const old = id && b.events.find(e => e.id === id);
+  openForm(old ? '일정 수정' : '일정 추가',
+    [{ k: 'title', label: '일정 제목', ph: '예: 정기점검, 타이어 교체 예약' }, { k: 'date', label: '날짜', type: 'date' },
+     { k: 'note', label: '메모', type: 'textarea', ph: '메모 입력' }, { k: 'done', label: '완료 처리', type: 'checkbox' }],
+    old || { title: '', date: date || today(), note: '', done: false },
+    v => {
+      if (!v.title || !v.date) return '제목과 날짜를 입력하세요.';
+      upsert(b.events, { id: old ? old.id : uid('e_'), ...v });
+      save('일정이 저장되었습니다.');
+    });
+};
+window.delEvent = id => {
+  if (!confirm('이 일정을 삭제할까요?')) return;
+  bike().events = (bike().events || []).filter(e => e.id !== id);
+  closeForm(); save('삭제되었습니다.');
+};
+window.doneEvent = id => {
+  const e = (bike().events || []).find(x => x.id === id);
+  if (e) { e.done = !e.done; closeForm(); save(); }
+};
+
+window.openDay = ds => {
+  const m = calMap[ds] || {};
+  openForm(ds, [], {}, () => {});
+  const row = (tag, cls, title, sub, act = '') => `<div class="col-span-2 flex items-start justify-between gap-2 bg-zinc-950/60 border border-zinc-800 rounded-xl p-2.5">
+    <div class="min-w-0"><span class="text-[10px] font-bold px-1.5 py-0.5 rounded ${cls}">${tag}</span>
+    <div class="text-sm font-bold text-white mt-1 break-words">${esc(title)}</div>${sub ? `<div class="text-xs text-zinc-400 mt-0.5 break-words">${esc(sub)}</div>` : ''}</div>
+    <div class="shrink-0 flex">${act}</div></div>`;
+  const edit = 'text-zinc-500 hover:text-amber-400';
+  let h = '';
+  (m.ev || []).forEach(e => h += row(e.done ? '일정 완료' : '내 일정', 'bg-violet-500/25 text-violet-200', e.title, e.note,
+    iconBtn('doneEvent', e.id, 'fa-check', e.done ? 'text-emerald-400' : edit) + iconBtn('editEvent', e.id, 'fa-pen', edit) + iconBtn('delEvent', e.id, 'fa-trash-can')));
+  (m.est || []).forEach(e => h += row('교체 예상', 'bg-red-500/20 text-red-300', e.name, e.over ? '교체 주기를 넘겼습니다. 지금 교체가 필요해요.' : '현재 주행 속도 기준 예상일'));
+  (m.hist || []).forEach(x => h += row(x.type, 'bg-sky-500/20 text-sky-300', x.title, `${fmt(x.cost)}원 · ODO ${fmt(x.odo)} km`, iconBtn('editHist', x.id, 'fa-pen', edit)));
+  (m.fuel || []).forEach(f => h += row('주유', 'bg-amber-500/20 text-amber-300', `${n(f.liters).toFixed(2)} L · ${fmt(f.cost)}원`, `ODO ${fmt(f.odo)} km`, iconBtn('editFuel', f.id, 'fa-pen', edit)));
+  $('m-body').innerHTML = h || '<div class="col-span-2 text-xs text-zinc-500 text-center py-4">이 날의 기록이 없습니다.</div>';
+  $('m-save').textContent = '이 날짜에 일정 추가';
+  $('m-save').onclick = () => editEvent(null, ds);
+};
 
 /* ---------- 렌더링 ---------- */
 function renderAll() {
@@ -535,6 +671,7 @@ function renderAll() {
         <button onclick="delSpec('${esc(s.id)}')" aria-label="삭제" class="p-2 rounded-lg bg-zinc-950 border border-zinc-800 text-zinc-500 hover:text-red-400"><i class="fa-solid fa-trash-can text-xs"></i></button>
       </div></div>`).join('') : empty('저장된 스펙 노트가 없습니다.');
 
+  renderCal();
   applyView();
 }
 try { const c = ls.get('gh_cache'); if (c) appData = normalize(JSON.parse(c)); } catch {}
