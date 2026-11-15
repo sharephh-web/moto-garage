@@ -666,6 +666,14 @@ window.openDay = ds => {
 };
 
 /* ---------- 렌더링 ---------- */
+// [사용률 상한(%), 막대 색, 뱃지 색, 문구]
+const STAGES = [
+  [50,  'bg-emerald-500', 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20', ''],
+  [70,  'bg-lime-400',    'text-lime-300 bg-lime-400/10 border-lime-400/25', ''],
+  [85,  'bg-yellow-400',  'text-yellow-300 bg-yellow-400/10 border-yellow-400/30', ' (곧 교체)'],
+  [95,  'bg-orange-500',  'text-orange-400 bg-orange-500/10 border-orange-500/30', ' (임박)'],
+  [100, 'bg-red-500',     'text-red-400 bg-red-500/10 border-red-500/30', ' (교체 시기!)']
+];
 function renderAll() {
   const b = bike();
   $('bike-tabs').innerHTML = appData.bikes.map(x => `
@@ -686,9 +694,8 @@ function renderAll() {
   $('list-consumables').innerHTML = b.consumables.length ? b.consumables.map(c => {
     const used = Math.max(0, b.odo - n(c.lastOdo)), interval = n(c.interval) || 1;
     const remain = interval - used, pct = Math.min(100, used / interval * 100);
-    let bar = 'bg-emerald-500', txt = `${fmt(remain)} km 남음`, badge = 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20';
-    if (pct >= 100) { bar = 'bg-red-500'; txt = `${fmt(Math.abs(remain))} km 초과!`; badge = 'text-red-400 bg-red-500/10 border-red-500/30 animate-pulse'; }
-    else if (pct >= 80) { bar = 'bg-amber-500'; txt += ' (임박)'; badge = 'text-amber-400 bg-amber-500/10 border-amber-500/20'; }
+    const [, bar, badge, tail] = STAGES.find(x => pct < x[0]) || [0, 'bg-red-500', 'text-red-400 bg-red-500/10 border-red-500/30 animate-pulse', ''];
+    const txt = pct >= 100 ? `${fmt(Math.abs(remain))} km 초과!` : `${fmt(remain)} km 남음${tail}`;
     return `<div class="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 space-y-3">
       <div class="flex justify-between items-start gap-2">
         <div class="min-w-0"><h4 class="text-sm font-bold text-white">${esc(c.name)}</h4>
@@ -704,7 +711,7 @@ function renderAll() {
           <button onclick="editCons('${esc(c.id)}')" class="text-[11px] text-amber-400 px-1 py-1">수정</button>
           <button onclick="delCons('${esc(c.id)}')" class="text-[11px] text-zinc-500 hover:text-red-400 px-1 py-1">삭제</button>
         </div>
-        <button onclick="resetCons('${esc(c.id)}')" class="bg-zinc-800 hover:bg-amber-500 hover:text-zinc-950 text-zinc-200 text-xs font-bold px-3.5 py-1.5 rounded-lg transition"><i class="fa-solid fa-rotate-right"></i> 교체완료 (리셋)</button>
+        <button onclick="resetCons('${esc(c.id)}')" class="bg-zinc-800 hover:bg-amber-500 hover:text-zinc-950 text-zinc-200 text-xs font-bold px-3.5 py-1.5 rounded-lg transition"><i class="fa-solid fa-check"></i> 교체완료 (리셋)</button>
       </div></div>`;
   }).join('') : empty('등록된 소모품 항목이 없습니다.');
 
