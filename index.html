@@ -4,13 +4,14 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>MOTO GARAGE - 바이크 정비 차계부</title>
+<script>try{if(localStorage.getItem('app_lock'))document.documentElement.classList.add('locked')}catch(e){}</script>
 <script src="https://cdn.tailwindcss.com"></script>
 <link href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" rel="stylesheet">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.css">
 <style>
 body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;background:#09090b;color:#f4f4f5;-webkit-tap-highlight-color:transparent}
 .no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
-.mh{scroll-margin-top:125px}html,body{overflow-anchor:none}
+.mh{scroll-margin-top:calc(var(--hh,110px) + 64px)}#lock{display:none}.locked #lock{display:flex}.locked body{overflow:hidden}html,body{overflow-anchor:none}
 .bar{transition:width .5s cubic-bezier(.4,0,.2,1)}
 .inp{width:100%;background:#09090b;border:1px solid #3f3f46;border-radius:.75rem;padding:.6rem .85rem;font-size:.875rem;color:#fff;outline:none}
 .inp:focus{border-color:#f59e0b}
@@ -18,13 +19,14 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;backgr
 </head>
 <body class="min-h-screen pb-24 max-w-md mx-auto bg-zinc-950 border-x border-zinc-900 relative">
 
-<header class="sticky top-0 z-30 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/80 px-4 pt-4 pb-3">
+<header id="app-header" class="sticky top-0 z-30 bg-zinc-950/90 backdrop-blur-md border-b border-zinc-800/80 px-4 pt-4 pb-3">
   <div class="flex items-center justify-between mb-3">
     <div class="flex items-center gap-2">
       <div class="w-8 h-8 rounded-lg bg-amber-500 flex items-center justify-center text-zinc-950 text-lg"><i class="fa-solid fa-wrench"></i></div>
       <h1 class="text-lg font-extrabold text-white">MOTO GARAGE</h1>
     </div>
     <div class="flex items-center gap-2">
+      <button id="btn-lock" onclick="lockNow()" aria-label="지금 잠그기" class="hidden text-zinc-400 hover:text-amber-500 text-sm px-1"><i class="fa-solid fa-lock"></i></button>
       <div id="sync" class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse" title="연결 중"></div>
       <button onclick="editBike()" data-new class="text-xs bg-zinc-800 text-zinc-200 px-3 py-1.5 rounded-full font-medium border border-zinc-700"><i class="fa-solid fa-plus text-amber-500"></i> 바이크 추가</button>
     </div>
@@ -55,7 +57,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;backgr
       </div>
     </section>
 
-    <div class="grid grid-cols-5 bg-zinc-900 p-1 rounded-xl border border-zinc-800 text-center" id="subtabs"></div>
+    <div class="grid grid-cols-5 bg-zinc-900 p-1 rounded-xl border border-zinc-800 text-center sticky z-20 shadow-lg shadow-black/50" style="top:calc(var(--hh,110px) + 6px)" id="subtabs"></div>
 
     <section id="view-consumables" class="space-y-3">
       <div class="flex items-center justify-between">
@@ -131,6 +133,15 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;backgr
         <button onclick="resetAll()" class="bg-red-500/10 text-red-400 border border-red-500/30 text-xs font-bold py-3 rounded-xl"><i class="fa-solid fa-rotate-right"></i> 초기화</button>
       </div>
     </div>
+    <h3 class="text-sm font-bold text-zinc-300">앱 잠금</h3>
+    <div class="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 space-y-3">
+      <p class="text-xs text-zinc-400 leading-relaxed">앱을 열 때 비밀번호를 입력해야 화면이 보입니다. 비밀번호는 이 기기에만 저장되므로 폰과 PC에서 각각 설정하세요. 앱을 벗어나 3분이 지나면 다시 잠깁니다.</p>
+      <p id="lock-state" class="text-xs font-bold"></p>
+      <div class="flex gap-2.5">
+        <button onclick="setLock()" class="flex-1 bg-zinc-800 text-white text-xs font-bold py-3 rounded-xl border border-zinc-700"><i class="fa-solid fa-lock text-amber-500"></i> <span id="lock-set-label">잠금 설정</span></button>
+        <button id="btn-lock-rm" onclick="removeLock()" class="hidden flex-1 bg-red-500/10 text-red-400 border border-red-500/30 text-xs font-bold py-3 rounded-xl">잠금 해제</button>
+      </div>
+    </div>
   </section>
 </main>
 
@@ -155,6 +166,17 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;backgr
       <button id="m-extra" class="hidden bg-red-500/10 text-red-400 border border-red-500/30 font-bold py-3 px-4 rounded-xl text-xs"></button>
       <button id="m-save" class="flex-1 bg-amber-500 text-zinc-950 font-bold py-3 rounded-xl text-sm">저장하기</button>
     </div>
+  </div>
+</div>
+
+<div id="lock" class="fixed inset-0 z-[100] bg-zinc-950 items-center justify-center p-6">
+  <div class="w-full max-w-xs text-center space-y-4">
+    <div class="w-14 h-14 mx-auto rounded-2xl bg-amber-500 flex items-center justify-center text-zinc-950 text-2xl"><i class="fa-solid fa-lock"></i></div>
+    <h2 class="text-lg font-extrabold text-white">MOTO GARAGE</h2>
+    <input id="lock-pw" type="password" autocomplete="current-password" class="inp text-center text-lg tracking-widest" placeholder="비밀번호">
+    <p id="lock-msg" class="text-xs text-red-400 min-h-[1rem]"></p>
+    <button id="lock-btn" class="w-full bg-amber-500 text-zinc-950 font-bold py-3 rounded-xl text-sm">잠금 해제</button>
+    <p class="text-[10px] text-zinc-600 leading-relaxed">비밀번호를 잊으셨다면 브라우저의 이 사이트 데이터를 삭제하세요.<br>기록은 GitHub에 안전하게 남아 있습니다.</p>
   </div>
 </div>
 
@@ -310,13 +332,13 @@ function openForm(title, fields, vals, cb, extra) {
     else input = `<input id="${id}" type="${f.type || 'text'}" ${f.type === 'number' ? 'inputmode="decimal" step="any"' : ''} value="${esc(v)}" class="inp" placeholder="${esc(f.ph)}">`;
     return `<div class="${span}"><label class="block text-xs text-zinc-400 mb-1">${esc(f.label)}</label>${input}</div>`;
   }).join('');
-  onSave = () => {
+  onSave = async () => {
     const out = {};
     fields.forEach(f => {
       const el = $('f_' + f.k);
       out[f.k] = f.type === 'checkbox' ? el.checked : f.type === 'number' ? n(el.value) : el.value.trim();
     });
-    const err = cb(out);
+    const err = await cb(out);
     if (err) return alert(err);
     closeForm();
   };
@@ -448,7 +470,7 @@ window.resetAll = () => {
 
 /* ---------- 탭 ---------- */
 const SUBS = [['consumables', '소모품'], ['fuel', '주유기록'], ['history', '정비이력'], ['specs', '스펙노트'], ['calendar', '일정']];
-window.setSub = t => { sub = t; applyView(); if (t === 'calendar' && !calInit) { calInit = true; requestAnimationFrame(calToday); } };
+window.setSub = t => { sub = t; applyView(); if (t === 'calendar') requestAnimationFrame(calToday); else window.scrollTo(0, 0); };
 window.setMain = m => { main = m; applyView(); };
 function applyView() {
   $('home').classList.toggle('hidden', main === 'settings');
@@ -459,6 +481,72 @@ function applyView() {
   $('nav-garage').className = `flex flex-col items-center gap-1 ${main === 'garage' ? 'text-amber-500' : 'text-zinc-500'}`;
   $('nav-settings').className = `flex flex-col items-center gap-1 ${main === 'settings' ? 'text-amber-500' : 'text-zinc-500'}`;
 }
+
+/* ---------- 앱 잠금 ---------- */
+const lockData = () => { try { return JSON.parse(ls.get('app_lock')); } catch { return null; } };
+const hex = buf => [...new Uint8Array(buf)].map(x => x.toString(16).padStart(2, '0')).join('');
+async function hashPw(pw, salt) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: 150000, hash: 'SHA-256' }, key, 256));
+}
+let lockFails = 0, lockUntil = 0, hiddenAt = 0;
+const root = document.documentElement;
+
+function showLock() {
+  root.classList.add('locked');
+  $('lock-pw').value = ''; $('lock-msg').textContent = '';
+  setTimeout(() => $('lock-pw').focus(), 50);
+}
+async function tryUnlock() {
+  const d = lockData();
+  if (!d) return root.classList.remove('locked');
+  if (Date.now() < lockUntil) { $('lock-msg').textContent = `${Math.ceil((lockUntil - Date.now()) / 1000)}초 후 다시 시도하세요.`; return; }
+  const ok = (await hashPw($('lock-pw').value.trim(), d.salt)) === d.hash;
+  $('lock-pw').value = '';
+  if (ok) { lockFails = 0; $('lock-msg').textContent = ''; root.classList.remove('locked'); return; }
+  lockFails++;
+  if (lockFails >= 5) { lockUntil = Date.now() + 30000; lockFails = 0; $('lock-msg').textContent = '5회 틀렸습니다. 30초 후 다시 시도하세요.'; }
+  else $('lock-msg').textContent = `비밀번호가 맞지 않습니다 (${lockFails}/5)`;
+}
+function updateLockUI() {
+  const on = !!lockData();
+  $('btn-lock').classList.toggle('hidden', !on);
+  $('btn-lock-rm').classList.toggle('hidden', !on);
+  $('lock-set-label').textContent = on ? '비밀번호 변경' : '잠금 설정';
+  $('lock-state').textContent = on ? '잠금 사용 중' : '잠금 꺼짐';
+  $('lock-state').className = `text-xs font-bold ${on ? 'text-emerald-400' : 'text-zinc-500'}`;
+}
+window.lockNow = showLock;
+window.setLock = () => {
+  const d = lockData();
+  openForm(d ? '비밀번호 변경' : '앱 잠금 설정',
+    [...(d ? [{ k: 'cur', label: '현재 비밀번호', type: 'password' }] : []),
+     { k: 'pw', label: '새 비밀번호 (4자 이상)', type: 'password' }, { k: 'pw2', label: '새 비밀번호 확인', type: 'password' }],
+    {}, async v => {
+      if (d && (await hashPw(v.cur, d.salt)) !== d.hash) return '현재 비밀번호가 맞지 않습니다.';
+      if (v.pw.length < 4) return '비밀번호는 4자 이상이어야 합니다.';
+      if (v.pw !== v.pw2) return '새 비밀번호가 서로 다릅니다.';
+      const salt = hex(crypto.getRandomValues(new Uint8Array(16)));
+      ls.set('app_lock', JSON.stringify({ salt, hash: await hashPw(v.pw, salt) }));
+      updateLockUI(); toast('앱 잠금이 설정되었습니다.');
+    });
+};
+window.removeLock = () => {
+  const d = lockData(); if (!d) return;
+  openForm('앱 잠금 해제', [{ k: 'cur', label: '현재 비밀번호', type: 'password' }], {}, async v => {
+    if ((await hashPw(v.cur, d.salt)) !== d.hash) return '비밀번호가 맞지 않습니다.';
+    try { localStorage.removeItem('app_lock'); } catch {}
+    updateLockUI(); toast('앱 잠금이 해제되었습니다.');
+  });
+};
+$('lock-btn').onclick = tryUnlock;
+$('lock-pw').addEventListener('keydown', e => { if (e.key === 'Enter') tryUnlock(); });
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden) hiddenAt = Date.now();
+  else if (lockData() && hiddenAt && Date.now() - hiddenAt > 3 * 60 * 1000) showLock();
+});
+updateLockUI();
+if (lockData()) showLock();
 
 /* ---------- 일정 캘린더 ---------- */
 const WD = ['일', '월', '화', '수', '목', '금', '토'];
@@ -675,6 +763,10 @@ function renderAll() {
   applyView();
 }
 try { const c = ls.get('gh_cache'); if (c) appData = normalize(JSON.parse(c)); } catch {}
+const setHH = () => document.documentElement.style.setProperty('--hh', $('app-header').offsetHeight + 'px');
+setHH();
+window.addEventListener('resize', setHH);
+window.addEventListener('load', setHH);
 renderAll();
 pull();
 document.addEventListener('visibilitychange', () => { if (!document.hidden) pull(); });
