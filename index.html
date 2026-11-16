@@ -3,6 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="manifest" href="/manifest.json">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="MotoGarage">
+<meta name="theme-color" content="#09090b">
 <title>MOTO GARAGE - 바이크 정비 차계부</title>
 <script>try{if(localStorage.getItem('app_lock'))document.documentElement.classList.add('locked')}catch(e){}</script>
 <script src="https://cdn.tailwindcss.com"></script>
@@ -133,6 +139,16 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;backgr
         <button onclick="resetAll()" class="bg-red-500/10 text-red-400 border border-red-500/30 text-xs font-bold py-3 rounded-xl"><i class="fa-solid fa-rotate-right"></i> 초기화</button>
       </div>
     </div>
+    <h3 class="text-sm font-bold text-zinc-300">푸시 알림</h3>
+    <div class="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 space-y-3">
+      <p class="text-xs text-zinc-400 leading-relaxed">앱이 닫혀 있어도 매일 아침 9시쯤 교체 임박 소모품(사용률 85% 이상)과 오늘/내일 일정을 알려줍니다. 알림을 받을 기기마다 한 번씩 켜 주세요. 아이폰은 홈 화면에 추가한 앱에서만 켤 수 있습니다.</p>
+      <p id="push-state" class="text-xs font-bold text-zinc-500"></p>
+      <div class="flex gap-2.5">
+        <button id="btn-push-on" onclick="pushOn()" class="flex-1 bg-amber-500 text-zinc-950 text-xs font-bold py-3 rounded-xl"><i class="fa-solid fa-bell"></i> 이 기기에서 알림 켜기</button>
+        <button id="btn-push-test" onclick="pushTest()" class="hidden flex-1 bg-zinc-800 text-white text-xs font-bold py-3 rounded-xl border border-zinc-700">테스트 알림</button>
+        <button id="btn-push-off" onclick="pushOff()" class="hidden flex-1 bg-red-500/10 text-red-400 border border-red-500/30 text-xs font-bold py-3 rounded-xl">알림 끄기</button>
+      </div>
+    </div>
     <h3 class="text-sm font-bold text-zinc-300">앱 잠금</h3>
     <div class="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 space-y-3">
       <p class="text-xs text-zinc-400 leading-relaxed">앱을 열 때 비밀번호를 입력해야 화면이 보입니다. 비밀번호는 이 기기에만 저장되므로 폰과 PC에서 각각 설정하세요. 앱을 벗어나 3분이 지나면 다시 잠깁니다.</p>
@@ -229,7 +245,7 @@ const ls = {
 let cfg = (() => { try { return JSON.parse(ls.get('gh_cfg')) || {}; } catch { return {}; } })();
 const ready = () => !!(cfg.owner && cfg.repo && cfg.token);
 const branch = () => cfg.branch || 'main';
-const fileUrl = () => `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${cfg.path || 'garage-data.json'}`;
+const fileUrl = (p) => `https://api.github.com/repos/${cfg.owner}/${cfg.repo}/contents/${p || cfg.path || 'garage-data.json'}`;
 const hdr = () => ({ Authorization: `Bearer ${cfg.token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' });
 const b64e = s => { let t = ''; new TextEncoder().encode(s).forEach(x => t += String.fromCharCode(x)); return btoa(t); };
 const b64d = s => new TextDecoder().decode(Uint8Array.from(atob(s.replace(/\s/g, '')), c => c.charCodeAt(0)));
@@ -481,6 +497,70 @@ function applyView() {
   $('nav-garage').className = `flex flex-col items-center gap-1 ${main === 'garage' ? 'text-amber-500' : 'text-zinc-500'}`;
   $('nav-settings').className = `flex flex-col items-center gap-1 ${main === 'settings' ? 'text-amber-500' : 'text-zinc-500'}`;
 }
+
+/* ---------- 푸시 알림 ---------- */
+if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(console.error);
+const urlKey = s => Uint8Array.from(atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
+async function ghJson(path) {
+  const r = await fetch(`${fileUrl(path)}?ref=${encodeURIComponent(branch())}&t=${Date.now()}`, { headers: hdr(), cache: 'no-store' });
+  if (r.status === 404) return { data: null, sha: null };
+  if (!r.ok) throw new Error(r.status);
+  const j = await r.json();
+  return { data: JSON.parse(b64d(j.content)), sha: j.sha };
+}
+async function ghSave(path, data, sha, message) {
+  const body = { message, content: b64e(JSON.stringify(data, null, 2)), branch: branch() };
+  if (sha) body.sha = sha;
+  const r = await fetch(fileUrl(path), { method: 'PUT', headers: hdr(), body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(r.status);
+}
+async function updatePushUI() {
+  let t, on = false;
+  if (!('serviceWorker' in navigator) || !('PushManager' in window) || !('Notification' in window)) t = '이 환경은 푸시를 지원하지 않습니다. (아이폰은 홈 화면에 추가한 앱에서만 가능)';
+  else if (Notification.permission === 'denied') t = '알림이 차단되어 있습니다. 기기 설정에서 허용해 주세요.';
+  else {
+    try { on = !!(await (await navigator.serviceWorker.ready).pushManager.getSubscription()); } catch {}
+    t = on ? '이 기기에서 푸시 알림 켜짐' : '이 기기에서 푸시 알림 꺼짐';
+  }
+  $('push-state').textContent = t;
+  $('push-state').className = `text-xs font-bold ${on ? 'text-emerald-400' : 'text-zinc-500'}`;
+  $('btn-push-on').classList.toggle('hidden', on);
+  $('btn-push-off').classList.toggle('hidden', !on);
+  $('btn-push-test').classList.toggle('hidden', !on);
+}
+window.pushOn = async () => {
+  if (!ready()) return alert('먼저 GitHub 연결 설정을 해주세요.');
+  if (!('serviceWorker' in navigator) || !('PushManager' in window)) return alert('이 환경은 푸시를 지원하지 않습니다. 아이폰은 홈 화면에 추가한 앱에서 열어 주세요.');
+  try {
+    const perm = await Notification.requestPermission();   // 버튼을 누른 직후 바로 요청해야 함
+    if (perm !== 'granted') return alert('알림 권한이 허용되지 않았습니다.');
+    const key = (await ghJson('vapid-public.json')).data;
+    if (!key) return alert('알림 서버가 아직 준비되지 않았습니다. moto-garage-data 저장소의 Actions에서 "Garage Notify"를 한 번 실행해 주세요.');
+    const reg = await navigator.serviceWorker.ready;
+    const sub = (await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: urlKey(key.publicKey) });
+    const { data, sha } = await ghJson('push-subs.json');
+    const list = (data || []).filter(x => x.endpoint !== sub.endpoint);
+    list.push({ ...sub.toJSON(), label: /iPhone|iPad/.test(navigator.userAgent) ? 'iPhone' : /Android/.test(navigator.userAgent) ? 'Android' : 'PC', at: new Date().toISOString() });
+    await ghSave('push-subs.json', list, sha, 'push subscribe');
+    toast('이 기기에서 푸시 알림이 켜졌습니다.');
+  } catch (e) { console.error(e); alert('알림 설정 실패: ' + e.message); }
+  updatePushUI();
+};
+window.pushOff = async () => {
+  try {
+    const sub = await (await navigator.serviceWorker.ready).pushManager.getSubscription();
+    if (sub) {
+      const ep = sub.endpoint; await sub.unsubscribe();
+      if (ready()) { const { data, sha } = await ghJson('push-subs.json'); if (data) await ghSave('push-subs.json', data.filter(x => x.endpoint !== ep), sha, 'push unsubscribe'); }
+    }
+    toast('푸시 알림이 꺼졌습니다.');
+  } catch (e) { console.error(e); alert('실패: ' + e.message); }
+  updatePushUI();
+};
+window.pushTest = async () => {
+  (await navigator.serviceWorker.ready).showNotification('MOTO GARAGE', { body: '테스트 알림입니다. 이 기기에서 알림이 정상 표시됩니다.', icon: '/icon-192.png' });
+};
+updatePushUI();
 
 /* ---------- 앱 잠금 ---------- */
 const lockData = () => { try { return JSON.parse(ls.get('app_lock')); } catch { return null; } };
