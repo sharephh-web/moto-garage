@@ -17,7 +17,7 @@
 <style>
 body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;background:#09090b;color:#f4f4f5;-webkit-tap-highlight-color:transparent}
 .no-scrollbar::-webkit-scrollbar{display:none}.no-scrollbar{-ms-overflow-style:none;scrollbar-width:none}
-.mh{scroll-margin-top:calc(var(--hh,110px) + 64px)}#lock{display:none}.locked #lock{display:flex}.locked body{overflow:hidden}html,body{overflow-anchor:none}
+.mh{scroll-margin-top:calc(var(--hh,110px) + 64px)}.cons-card{-webkit-touch-callout:none;-webkit-user-select:none;user-select:none}#lock{display:none}.locked #lock{display:flex}.locked body{overflow:hidden}html,body{overflow-anchor:none}
 .bar{transition:width .5s cubic-bezier(.4,0,.2,1)}
 .inp{width:100%;background:#09090b;border:1px solid #3f3f46;border-radius:.75rem;padding:.6rem .85rem;font-size:.875rem;color:#fff;outline:none}
 .inp:focus{border-color:#f59e0b}
@@ -70,6 +70,7 @@ body{font-family:'Pretendard',-apple-system,BlinkMacSystemFont,sans-serif;backgr
         <h3 class="text-sm font-bold text-zinc-300">소모품 수명 상태</h3>
         <button onclick="editCons()" class="text-xs text-amber-500 font-semibold"><i class="fa-solid fa-plus"></i> 항목 추가</button>
       </div>
+      <p class="text-[10px] text-zinc-500">카드를 길게 누른 채 위아래로 끌면 순서를 바꿀 수 있어요.</p>
       <div id="list-consumables" class="space-y-3"></div>
     </section>
 
@@ -498,6 +499,68 @@ function applyView() {
   $('nav-settings').className = `flex flex-col items-center gap-1 ${main === 'settings' ? 'text-amber-500' : 'text-zinc-500'}`;
 }
 
+/* ---------- 소모품 순서 변경 (길게 눌러 끌기) ---------- */
+(() => {
+  const list = $('list-consumables');
+  let timer = null, st = null, d = null, raf = 0, lastY = 0;
+  const clearTimer = () => { clearTimeout(timer); timer = null; };
+
+  list.addEventListener('contextmenu', e => { if (e.target.closest('.cons-card')) e.preventDefault(); });
+  list.addEventListener('pointerdown', e => {
+    const card = e.target.closest('.cons-card');
+    if (!card || e.target.closest('button') || (e.pointerType === 'mouse' && e.button !== 0)) return;
+    st = { x: e.clientX, y: e.clientY }; lastY = e.clientY;
+    clearTimer();
+    timer = setTimeout(() => start(card), 450);   // 0.45초 길게 누르면 시작
+  });
+
+  function start(card) {
+    timer = null; window.__dragging = true;
+    d = { card, grab: lastY - card.getBoundingClientRect().top };
+    card.classList.add('relative', 'z-10', 'shadow-2xl', 'shadow-black/60', 'ring-2', 'ring-amber-500');
+    if (navigator.vibrate) navigator.vibrate(30);
+    loop();
+  }
+  function place() {
+    const c = d.card; c.style.transform = 'none';
+    let before = null;
+    for (const s of list.children) {
+      if (s === c) continue;
+      const r = s.getBoundingClientRect();
+      if (lastY < r.top + r.height / 2) { before = s; break; }
+    }
+    if (before !== c.nextElementSibling) list.insertBefore(c, before);
+    c.style.transform = `translateY(${lastY - d.grab - c.getBoundingClientRect().top}px)`;
+  }
+  function loop() {
+    if (!d) return;
+    const top = (parseInt(getComputedStyle(document.documentElement).getPropertyValue('--hh')) || 110) + 70, bot = innerHeight - 90;
+    if (lastY < top) scrollBy(0, -Math.min(14, (top - lastY) / 4 + 2));      // 가장자리에서 자동 스크롤
+    else if (lastY > bot) scrollBy(0, Math.min(14, (lastY - bot) / 4 + 2));
+    place();
+    raf = requestAnimationFrame(loop);
+  }
+  function end() {
+    clearTimer(); st = null;
+    if (!d) return;
+    cancelAnimationFrame(raf);
+    const ids = [...list.children].map(c => c.dataset.id);
+    d = null; window.__dragging = false;
+    const b = bike();
+    const next = ids.map(id => b.consumables.find(c => c.id === id)).filter(Boolean);
+    b.consumables.forEach(c => { if (!next.includes(c)) next.push(c); });
+    if (next.some((c, i) => c !== b.consumables[i])) { b.consumables = next; save('순서가 변경되었습니다.'); }
+    else renderAll();
+  }
+  document.addEventListener('pointermove', e => {
+    lastY = e.clientY;
+    if (st && !d && Math.hypot(e.clientX - st.x, e.clientY - st.y) > 8) { clearTimer(); st = null; }   // 스크롤 의도면 취소
+  });
+  document.addEventListener('pointerup', end);
+  document.addEventListener('pointercancel', end);
+  document.addEventListener('touchmove', e => { if (d) e.preventDefault(); }, { passive: false });   // 끄는 동안 화면 스크롤 방지
+})();
+
 /* ---------- 푸시 알림 ---------- */
 if ('serviceWorker' in navigator) navigator.serviceWorker.register('/sw.js').catch(console.error);
 const urlKey = s => Uint8Array.from(atob((s + '='.repeat((4 - s.length % 4) % 4)).replace(/-/g, '+').replace(/_/g, '/')), c => c.charCodeAt(0));
@@ -755,6 +818,7 @@ const STAGES = [
   [100, 'bg-red-500',     'text-red-400 bg-red-500/10 border-red-500/30', ' (교체 시기!)']
 ];
 function renderAll() {
+  if (window.__dragging) return;   // 끌고 있는 동안은 화면을 다시 그리지 않음
   const b = bike();
   $('bike-tabs').innerHTML = appData.bikes.map(x => `
     <button onclick="selectBike('${esc(x.id)}')" class="whitespace-nowrap px-3.5 py-2 rounded-xl text-xs font-bold flex items-center gap-2 border ${x.id === b.id ? 'bg-amber-500 text-zinc-950 border-amber-500' : 'bg-zinc-900 text-zinc-400 border-zinc-800'}">
@@ -776,7 +840,7 @@ function renderAll() {
     const remain = interval - used, pct = Math.min(100, used / interval * 100);
     const [, bar, badge, tail] = STAGES.find(x => pct < x[0]) || [0, 'bg-red-500', 'text-red-400 bg-red-500/10 border-red-500/30 animate-pulse', ''];
     const txt = pct >= 100 ? `${fmt(Math.abs(remain))} km 초과!` : `${fmt(remain)} km 남음${tail}`;
-    return `<div class="bg-zinc-900 rounded-2xl p-4 border border-zinc-800 space-y-3">
+    return `<div data-id="${esc(c.id)}" class="cons-card bg-zinc-900 rounded-2xl p-4 border border-zinc-800 space-y-3">
       <div class="flex justify-between items-start gap-2">
         <div class="min-w-0"><h4 class="text-sm font-bold text-white">${esc(c.name)}</h4>
           <p class="text-[11px] text-zinc-400 mt-0.5">${esc(c.note || `교체 주기: ${fmt(c.interval)} km`)}</p></div>
